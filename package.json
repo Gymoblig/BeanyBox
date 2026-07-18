@@ -7,13 +7,14 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder"
   },
   "dependencies": {
     "google-auth-library": "^9.14.1",
     "googleapis": "^140.0.1"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^31.3.1",
     "electron-builder": "^24.13.3"
   },
@@ -29,8 +30,8 @@
       "auth.js",
       "gmail.js",
       "icon.png",
-      "renderer/**/*",
-      "!oauth-config.json"
+      "oauth-config.json",
+      "renderer/**/*"
     ],
     "icon": "icon.png",
     "win": {

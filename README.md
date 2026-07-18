@@ -83,6 +83,13 @@ npm run dist
 Produces a portable `.exe` and an NSIS installer in `dist/` — either runs
 BeanyBox without a terminal, pinnable to your taskbar like any other app.
 
+> **If the build fails with a symlink/`Cannot create symbolic link` error**,
+> or `dist/win-unpacked` contains a generic `electron.exe` with no icon:
+> Windows blocks regular accounts from creating symlinks, which the packaging
+> step needs briefly. Turn on **Developer Mode** (Settings → Privacy &
+> Security → For Developers) once, or run the command from an elevated
+> ("Run as administrator") terminal.
+
 ## Keyboard shortcuts
 
 | Key           | Action                          |
