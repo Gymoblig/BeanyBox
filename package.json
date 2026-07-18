@@ -1,0 +1,46 @@
+{
+  "name": "beanybox",
+  "productName": "BeanyBox",
+  "version": "1.0.0",
+  "description": "GreenyBeany's terminal-styled desktop email client for Gmail",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.14.1",
+    "googleapis": "^140.0.1"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "dev.greenybeany.beanybox",
+    "productName": "BeanyBox",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "auth.js",
+      "gmail.js",
+      "icon.png",
+      "renderer/**/*",
+      "!oauth-config.json"
+    ],
+    "icon": "icon.png",
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    }
+  },
+  "allowScripts": {
+    "electron@31.7.7": true
+  }
+}
