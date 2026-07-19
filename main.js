@@ -1,8 +1,10 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const authModule = require('./auth');
+const googleAuth = require('./google-auth');
+const microsoftAuth = require('./microsoft-auth');
 const { GmailClient } = require('./gmail');
+const { OutlookClient } = require('./outlook');
 
 const MIME_TYPES = {
   '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -21,7 +23,28 @@ function guessMime(filename) {
 }
 
 let mainWindow = null;
-let gmailClient = null;
+let mailClient = null;
+let activeProvider = null; // 'google' | 'microsoft' | null
+
+function providerMarkerPath() {
+  return path.join(app.getPath('userData'), 'active-provider.json');
+}
+
+function readActiveProvider() {
+  try {
+    return JSON.parse(fs.readFileSync(providerMarkerPath(), 'utf8')).provider;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeActiveProvider(provider) {
+  fs.writeFileSync(providerMarkerPath(), JSON.stringify({ provider }));
+}
+
+function clearActiveProvider() {
+  try { fs.unlinkSync(providerMarkerPath()); } catch (e) { /* nothing to clear */ }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -60,8 +83,20 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  const restored = await authModule.restoreSession().catch(() => null);
-  if (restored) gmailClient = new GmailClient(restored);
+  // Try whichever provider was last active first, then fall back to trying
+  // both — this keeps existing Gmail-only installs restoring with zero
+  // migration step even though there was no marker file before this.
+  const marker = readActiveProvider();
+  const order = marker === 'microsoft' ? ['microsoft', 'google'] : ['google', 'microsoft'];
+  for (const provider of order) {
+    if (provider === 'google') {
+      const restored = await googleAuth.restoreSession().catch(() => null);
+      if (restored) { mailClient = new GmailClient(restored); activeProvider = 'google'; break; }
+    } else {
+      const restored = await microsoftAuth.restoreSession().catch(() => null);
+      if (restored) { mailClient = new OutlookClient(restored); activeProvider = 'microsoft'; break; }
+    }
+  }
 
   createWindow();
 
@@ -85,38 +120,49 @@ ipcMain.on('window:close', () => mainWindow && mainWindow.close());
 
 // --- auth ---
 ipcMain.handle('auth:status', async () => {
-  if (gmailClient) {
+  if (mailClient) {
     try {
-      const profile = await gmailClient.getProfile();
-      return { signedIn: true, email: profile.emailAddress };
+      const profile = await mailClient.getProfile();
+      return { signedIn: true, email: profile.emailAddress, provider: activeProvider };
     } catch (e) {
-      gmailClient = null;
+      mailClient = null;
+      activeProvider = null;
     }
   }
   return { signedIn: false };
 });
 
-ipcMain.handle('auth:login', async () => {
+ipcMain.handle('auth:login', async (e, provider) => {
   try {
-    const client = await authModule.login();
-    gmailClient = new GmailClient(client);
-    const profile = await gmailClient.getProfile();
-    return { ok: true, email: profile.emailAddress };
+    if (provider === 'microsoft') {
+      const client = await microsoftAuth.login();
+      mailClient = new OutlookClient(client);
+    } else {
+      const client = await googleAuth.login();
+      mailClient = new GmailClient(client);
+    }
+    const profile = await mailClient.getProfile();
+    activeProvider = provider === 'microsoft' ? 'microsoft' : 'google';
+    writeActiveProvider(activeProvider);
+    return { ok: true, email: profile.emailAddress, provider: activeProvider };
   } catch (e) {
     return { ok: false, error: e.message };
   }
 });
 
 ipcMain.handle('auth:logout', async () => {
-  authModule.logout();
-  gmailClient = null;
+  if (activeProvider === 'microsoft') microsoftAuth.logout();
+  else googleAuth.logout();
+  mailClient = null;
+  activeProvider = null;
+  clearActiveProvider();
   return { ok: true };
 });
 
-// --- gmail ---
+// --- mail ---
 function requireClient() {
-  if (!gmailClient) throw new Error('Not signed in');
-  return gmailClient;
+  if (!mailClient) throw new Error('Not signed in');
+  return mailClient;
 }
 
 ipcMain.handle('gmail:listLabels', async () => requireClient().listLabels());

@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   onWindowState: (cb) => ipcRenderer.on('window:state', (e, state) => cb(state)),
 
   authStatus: () => ipcRenderer.invoke('auth:status'),
-  login: () => ipcRenderer.invoke('auth:login'),
+  login: (provider) => ipcRenderer.invoke('auth:login', provider),
   logout: () => ipcRenderer.invoke('auth:logout'),
 
   listLabels: () => ipcRenderer.invoke('gmail:listLabels'),

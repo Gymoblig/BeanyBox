@@ -3,6 +3,18 @@
 <head>
 <meta charset="utf-8">
 <title>BeanyBox</title>
+<script>
+(function () {
+  try {
+    var theme = localStorage.getItem('beanybox_theme') || 'system';
+    if (theme === 'system') {
+      theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.density = localStorage.getItem('beanybox_density') || 'comfortable';
+  } catch (e) {}
+})();
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>

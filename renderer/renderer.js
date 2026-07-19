@@ -15,6 +15,24 @@
     return AVATAR_COLORS[h % AVATAR_COLORS.length];
   }
 
+  const ACCENTS = [
+    { id: 'red', name: 'Red', value: '#ff5c5c' },
+    { id: 'orange', name: 'Orange', value: '#ff9d42' },
+    { id: 'amber', name: 'Amber', value: '#ffcc4d' },
+    { id: 'green', name: 'Green', value: '#5ce87a' },
+    { id: 'cyan', name: 'Cyan', value: '#5ae0c0' },
+    { id: 'blue', name: 'Blue', value: '#5ac8ff' },
+    { id: 'purple', name: 'Purple', value: '#b58aff' },
+    { id: 'pink', name: 'Pink', value: '#ff8ac2' },
+  ];
+  const PAGE_SIZES = [10, 20, 30, 50, 100];
+  const LOGIN_PROVIDERS = ['google', 'microsoft'];
+
+  const SVG_ICON_ATTRS = 'viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const ICON_ARCHIVE = `<svg ${SVG_ICON_ATTRS}><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>`;
+  const ICON_TRASH = `<svg ${SVG_ICON_ATTRS}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>`;
+  const ICON_RESTORE = `<svg ${SVG_ICON_ATTRS}><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`;
+
   // Pure-JS MD5 (public-domain algorithm) so we can look up Gravatar photos by email hash.
   function md5(str) {
     function rotl(x, c) { return (x << c) | (x >>> (32 - c)); }
@@ -126,19 +144,26 @@
     }[c]));
   }
 
+  // Shared by every place a time-of-day gets rendered, so the 12h/24h
+  // setting applies consistently everywhere instead of just some displays.
+  function formatHourMinute(d, { full } = {}) {
+    const m = String(d.getMinutes()).padStart(2, '0');
+    if (state.settings.timeFormat === '24h') {
+      return `${String(d.getHours()).padStart(2, '0')}:${m}`;
+    }
+    let h = d.getHours();
+    const ap = h >= 12 ? (full ? 'PM' : 'p') : (full ? 'AM' : 'a');
+    h = h % 12; if (h === 0) h = 12;
+    return full ? `${h}:${m} ${ap}` : `${h}:${m}${ap}`;
+  }
+
   function formatRelative(dateStr) {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return '';
     const now = new Date();
     const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
     const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
-    if (diffDays === 0) {
-      let h = d.getHours();
-      const m = String(d.getMinutes()).padStart(2, '0');
-      const ap = h >= 12 ? 'p' : 'a';
-      h = h % 12; if (h === 0) h = 12;
-      return `${h}:${m}${ap}`;
-    }
+    if (diffDays === 0) return formatHourMinute(d, { full: true });
     if (diffDays === 1) return 'Yest';
     const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     if (diffDays > 1 && diffDays < 7) return WD[d.getDay()];
@@ -153,16 +178,11 @@
     if (isNaN(d.getTime())) return dateStr;
     const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    let h = d.getHours();
-    const m = String(d.getMinutes()).padStart(2, '0');
-    const ap = h >= 12 ? 'PM' : 'AM';
-    h = h % 12; if (h === 0) h = 12;
-    return `${WD[d.getDay()]}, ${MO[d.getMonth()]} ${d.getDate()} ${d.getFullYear()}, ${h}:${m} ${ap}`;
+    return `${WD[d.getDay()]}, ${MO[d.getMonth()]} ${d.getDate()} ${d.getFullYear()}, ${formatHourMinute(d, { full: true })}`;
   }
 
   function clockLabel() {
-    const d = new Date();
-    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return formatHourMinute(new Date(), { full: true });
   }
 
   function formatSize(bytes) {
@@ -201,8 +221,11 @@
   const state = {
     screen: 'loading', // loading | login | app
     loginBusy: false,
+    loginProvider: null, // 'google' | 'microsoft' — which one is mid-flight
+    loginSelected: 0, // index into LOGIN_PROVIDERS — which login button [j/k] is on
     loginError: '',
     email: '',
+    provider: 'google', // 'google' | 'microsoft' — which account is signed in
     folders: [],
     activeFolderId: null,
     activeFolderName: '',
@@ -224,7 +247,88 @@
     nextPageToken: null,
     loadingMore: false,
     confirmModal: null, // { title, message, confirmLabel, dontAskKey, dontAskChecked, onConfirm }
+    settingsOpen: false,
+    settings: {
+      theme: localStorage.getItem('beanybox_theme') || 'system', // dark | light | system
+      accent: localStorage.getItem('beanybox_accent') || 'red',
+      density: localStorage.getItem('beanybox_density') || 'comfortable', // comfortable | compact
+      timeFormat: localStorage.getItem('beanybox_timeFormat') || '12h', // 12h | 24h
+    },
   };
+
+  function effectiveTheme() {
+    if (state.settings.theme === 'system') {
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    return state.settings.theme;
+  }
+
+  function applyThemeVars() {
+    document.documentElement.dataset.theme = effectiveTheme();
+    document.documentElement.dataset.density = state.settings.density;
+    const accent = ACCENTS.find((a) => a.id === state.settings.accent) || ACCENTS[0];
+    document.documentElement.style.setProperty('--accent', accent.value);
+  }
+
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+    if (state.settings.theme === 'system') { applyThemeVars(); render(); }
+  });
+
+  function setTheme(theme) {
+    state.settings.theme = theme;
+    localStorage.setItem('beanybox_theme', theme);
+    applyThemeVars();
+    render();
+  }
+
+  function setAccent(accent) {
+    state.settings.accent = accent;
+    localStorage.setItem('beanybox_accent', accent);
+    applyThemeVars();
+    render();
+  }
+
+  function setDensity(density) {
+    state.settings.density = density;
+    localStorage.setItem('beanybox_density', density);
+    applyThemeVars();
+    render();
+  }
+
+  function setTimeFormat(format) {
+    state.settings.timeFormat = format;
+    localStorage.setItem('beanybox_timeFormat', format);
+    render();
+  }
+
+  function setPageSize(n) {
+    if (state.pageSize === n) return;
+    state.pageSize = n;
+    localStorage.setItem('beanybox_pageSize', String(n));
+    render();
+    if (state.isSearch) runSearch(state.searchQuery);
+    else if (state.activeFolderId) loadMessages(state.activeFolderId);
+  }
+
+  function resetConfirmations() {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('beanybox_skip_confirm_'))
+      .forEach((k) => localStorage.removeItem(k));
+    state.statusRight = 'confirmations reset';
+    render();
+  }
+
+  function openSettings() {
+    state.settingsOpen = true;
+    render();
+  }
+
+  function closeSettings() {
+    state.settingsOpen = false;
+    render();
+  }
+
+  applyThemeVars();
 
   function selectedId() {
     return state.selectionByFolder[state.activeFolderId] || (state.messages[0] && state.messages[0].id) || null;
@@ -239,7 +343,7 @@
   // ---------- rendering ----------
 
   function render() {
-    renderModal();
+    renderModals();
     if (state.screen === 'loading') {
       root.innerHTML = '<div class="center-msg">loading…</div>';
       titlebarLabel.textContent = 'BeanyBox - TerMAIL';
@@ -278,10 +382,9 @@
     m.onConfirm();
   }
 
-  function renderModal() {
+  function renderModals() {
     const m = state.confirmModal;
-    if (!m) { modalRoot.innerHTML = ''; return; }
-    modalRoot.innerHTML = `
+    const confirmHtml = !m ? '' : `
       <div class="modal-overlay" id="modal-overlay">
         <div class="modal-box">
           <div class="modal-title">&#10095; ${esc(m.title)}</div>
@@ -296,14 +399,108 @@
           </div>
         </div>
       </div>`;
-    document.getElementById('modal-overlay').addEventListener('click', (e) => {
-      if (e.target.id === 'modal-overlay') closeConfirm();
+
+    modalRoot.innerHTML = confirmHtml + (state.settingsOpen ? settingsModalHtml() : '');
+
+    if (m) {
+      document.getElementById('modal-overlay').addEventListener('click', (e) => {
+        if (e.target.id === 'modal-overlay') closeConfirm();
+      });
+      document.getElementById('modal-cancel').addEventListener('click', closeConfirm);
+      document.getElementById('modal-confirm').addEventListener('click', confirmModalAccept);
+      document.getElementById('modal-dontask').addEventListener('change', (e) => {
+        state.confirmModal.dontAskChecked = e.target.checked;
+      });
+    }
+    if (state.settingsOpen) wireSettingsModal();
+  }
+
+  function settingsModalHtml() {
+    const s = state.settings;
+    return `
+      <div class="modal-overlay" id="settings-overlay">
+        <div class="modal-box settings-box">
+          <div class="modal-title">&#10095; Settings</div>
+
+          <div class="settings-section">
+            <div class="settings-label">Theme</div>
+            <div class="option-row">
+              <div class="option-btn ${s.theme === 'dark' ? 'active' : ''}" data-theme-opt="dark">Dark</div>
+              <div class="option-btn ${s.theme === 'light' ? 'active' : ''}" data-theme-opt="light">Light</div>
+              <div class="option-btn ${s.theme === 'system' ? 'active' : ''}" data-theme-opt="system">System</div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-label">Accent color</div>
+            <div class="swatch-row">
+              ${ACCENTS.map((a) => `
+                <div class="swatch ${s.accent === a.id ? 'active' : ''}" data-accent="${a.id}" style="background:${a.value};" title="${esc(a.name)}"></div>`).join('')}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-label">Density</div>
+            <div class="option-row">
+              <div class="option-btn ${s.density === 'comfortable' ? 'active' : ''}" data-density-opt="comfortable">Comfortable</div>
+              <div class="option-btn ${s.density === 'compact' ? 'active' : ''}" data-density-opt="compact">Compact</div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-label">Time format</div>
+            <div class="option-row">
+              <div class="option-btn ${s.timeFormat === '12h' ? 'active' : ''}" data-timeformat-opt="12h">12-hour</div>
+              <div class="option-btn ${s.timeFormat === '24h' ? 'active' : ''}" data-timeformat-opt="24h">24-hour</div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-label">Messages per page</div>
+            <div class="option-row">
+              ${PAGE_SIZES.map((n) => `
+                <div class="option-btn ${state.pageSize === n ? 'active' : ''}" data-pagesize="${n}">${n}</div>`).join('')}
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-label">Confirmations</div>
+            <div class="settings-hint">Reset any "don't ask again" dialogs you've dismissed (e.g. Empty Trash).</div>
+            <div class="act-btn" id="settings-reset-confirms">Reset confirmations</div>
+          </div>
+
+          <div class="modal-actions">
+            <div class="act-btn primary" id="settings-close">[Esc] Close</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function wireSettingsModal() {
+    document.getElementById('settings-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'settings-overlay') closeSettings();
     });
-    document.getElementById('modal-cancel').addEventListener('click', closeConfirm);
-    document.getElementById('modal-confirm').addEventListener('click', confirmModalAccept);
-    document.getElementById('modal-dontask').addEventListener('change', (e) => {
-      state.confirmModal.dontAskChecked = e.target.checked;
+    document.getElementById('settings-close').addEventListener('click', closeSettings);
+    document.getElementById('settings-reset-confirms').addEventListener('click', resetConfirmations);
+    modalRootAll('[data-theme-opt]').forEach((el) => {
+      el.addEventListener('click', () => setTheme(el.dataset.themeOpt));
     });
+    modalRootAll('[data-accent]').forEach((el) => {
+      el.addEventListener('click', () => setAccent(el.dataset.accent));
+    });
+    modalRootAll('[data-density-opt]').forEach((el) => {
+      el.addEventListener('click', () => setDensity(el.dataset.densityOpt));
+    });
+    modalRootAll('[data-timeformat-opt]').forEach((el) => {
+      el.addEventListener('click', () => setTimeFormat(el.dataset.timeformatOpt));
+    });
+    modalRootAll('[data-pagesize]').forEach((el) => {
+      el.addEventListener('click', () => setPageSize(Number(el.dataset.pagesize)));
+    });
+  }
+
+  function modalRootAll(sel) {
+    return Array.from(modalRoot.querySelectorAll(sel));
   }
 
   function renderLogin() {
@@ -311,16 +508,19 @@
       <div class="login-wrap">
         <div class="login-box">
           <div class="login-title">&#10095; BeanyBox login</div>
-          <div class="login-sub">Gmail &middot; GreenyBeany's TUI client v1.0.0</div>
-          <div class="login-desc">Sign in with your Google account. A browser window will open for Google's sign-in and consent screen — BeanyBox never sees your password.</div>
+          <div class="login-sub">Gmail &middot; Outlook &middot; GreenyBeany's TUI client v1.1.0</div>
+          <div class="login-desc">Sign in with Google or Microsoft. A browser window opens for that provider's real sign-in and consent screen — BeanyBox never sees your password. [j/k] choose &middot; [Enter] sign in.</div>
           ${state.loginError ? `<div class="login-error">! ${esc(state.loginError)}</div>` : ''}
-          <div class="login-btn ${state.loginBusy ? 'busy' : ''}" id="login-btn">
-            ${state.loginBusy ? 'Waiting for browser…' : '[Enter] Sign in with Google'}
+          <div class="login-btn ${state.loginBusy ? 'busy' : ''} ${state.loginSelected === 0 ? 'selected' : ''}" id="login-btn-google">
+            ${state.loginBusy && state.loginProvider === 'google' ? 'Waiting for browser…' : 'Sign in with Google'}
+          </div>
+          <div class="login-btn ${state.loginBusy ? 'busy' : ''} ${state.loginSelected === 1 ? 'selected' : ''}" id="login-btn-microsoft" style="margin-top:10px;">
+            ${state.loginBusy && state.loginProvider === 'microsoft' ? 'Waiting for browser…' : 'Sign in with Microsoft'}
           </div>
         </div>
       </div>`;
-    const btn = document.getElementById('login-btn');
-    btn.addEventListener('click', doLogin);
+    document.getElementById('login-btn-google').addEventListener('click', () => { state.loginSelected = 0; doLogin('google'); });
+    document.getElementById('login-btn-microsoft').addEventListener('click', () => { state.loginSelected = 1; doLogin('microsoft'); });
   }
 
   function renderApp() {
@@ -328,11 +528,19 @@
     const unreadTotal = state.folders.reduce((s, f) => s + (f.unread || 0), 0);
     const isTrash = !state.isSearch && state.activeFolderId === 'TRASH';
 
+    // root.innerHTML gets fully rebuilt below on every render — including
+    // ones triggered by things unrelated to scrolling, like the message
+    // detail finishing its async load — which would otherwise reset the
+    // list's scroll position back to the top every time.
+    const prevMsgList = document.getElementById('msg-list');
+    const prevScrollTop = prevMsgList ? prevMsgList.scrollTop : 0;
+
     root.innerHTML = `
       <div class="statusbar-top">
         <div class="left">
-          <span class="acct">&#9670; ${esc(state.email)}</span>
+          <span class="acct">&#9670; ${esc(state.email)}${state.provider === 'microsoft' ? ' (Outlook)' : ''}</span>
           <span class="signout-btn" id="signout-btn">[sign out]</span>
+          <span class="settings-btn" id="settings-btn" title="Settings (,)">[settings]</span>
           <span>${esc(folderLabel)}</span>
         </div>
         <div>${clockLabel()}</div>
@@ -350,7 +558,7 @@
               <span class="name ${!state.isSearch && f.id === state.activeFolderId ? 'active' : ''}">${esc(f.name)}</span>
               <span class="folder-count ${!state.isSearch && f.id === state.activeFolderId ? 'active' : ''}">${f.unread || ''}</span>
             </div>`).join('')}
-          <div class="sidebar-footer">v1.0.0-tui &middot; ${state.listLoading ? 'syncing…' : 'sync ok'}</div>
+          <div class="sidebar-footer">v1.1.0-tui &middot; ${state.listLoading ? 'syncing…' : 'sync ok'}</div>
         </div>
 
         <div class="list-pane">
@@ -377,13 +585,17 @@
           <span>[j/k] move</span><span>|</span><span>[c] compose</span><span>|</span><span>[r] reply</span><span>|</span>
           <span>[a] archive</span><span>|</span><span>[d] delete</span><span>|</span><span>[u] restore</span><span>|</span>
           <span>[t] tag</span><span>|</span><span>[w] read-all</span><span>|</span>
-          <span>[Ctrl+Space] search</span><span>|</span><span>[q] quit</span>
+          <span>[Ctrl+Space] search</span><span>|</span><span>[,] settings</span><span>|</span><span>[q] quit</span>
         </div>
         <div>${state.statusRight || unreadTotal + ' unread'}</div>
       </div>
     `;
 
+    const newMsgList = document.getElementById('msg-list');
+    if (newMsgList) newMsgList.scrollTop = prevScrollTop;
+
     document.getElementById('signout-btn').addEventListener('click', doLogout);
+    document.getElementById('settings-btn').addEventListener('click', openSettings);
     const newMsgBtn = document.getElementById('new-msg-btn');
     if (newMsgBtn) newMsgBtn.addEventListener('click', () => openCompose());
     const emptyTrashBtn = document.getElementById('empty-trash-btn');
@@ -446,13 +658,25 @@
     if (state.listLoading) return '<div class="msg-empty">loading…</div>';
     if (state.messages.length === 0) return '<div class="msg-empty">(no messages)</div>';
     const selId = selectedId();
+    const compact = state.settings.density === 'compact';
     return state.messages.map((m) => {
       const active = m.id === selId;
-      const color = avatarColor(m.sender || m.email || '?');
-      const senderColor = active ? '#ff5c5c' : (m.unread ? '#e8e8e8' : '#9a9a9a');
-      const subjColor = active ? '#e8e8e8' : (m.unread ? '#d0d0d0' : '#8a8a8a');
+      const senderColor = active ? 'var(--accent)' : (m.unread ? 'var(--text-bright)' : 'var(--text-dim)');
+      const subjColor = active ? 'var(--text-bright)' : (m.unread ? 'var(--text)' : 'var(--text-dim)');
       const weight = m.unread ? 600 : 400;
       const mark = m.unread ? '● ' : '○ ';
+
+      if (compact) {
+        return `
+        <div class="msg-row compact ${active ? 'active' : ''}" data-id="${esc(m.id)}">
+          <span class="msg-compact-line" style="color:${senderColor};font-weight:${weight};">
+            ${mark}${esc(m.sender)}<span class="msg-compact-sep">&mdash;</span><span style="color:${subjColor};">${esc(m.subject)}</span>
+          </span>
+          <span class="msg-date">${esc(formatRelative(m.date))}</span>
+        </div>`;
+      }
+
+      const color = avatarColor(m.sender || m.email || '?');
       const tags = userTagsFor(m.labelIds);
       return `
         <div class="msg-row ${active ? 'active' : ''}" data-id="${esc(m.id)}">
@@ -487,14 +711,25 @@
       html = html.replace(re, img.inlineData ? `data:${img.mimeType};base64,${b64urlToB64(img.inlineData)}` : '');
     });
 
+    // In dark mode the email's own light background/text gets darkened via a
+    // soft "invert twice" trick: the whole page is inverted, then media
+    // elements get the same filter applied a second time, which cancels back
+    // out to their real colors (two inversions = identity) while text/background
+    // stay dark. In light mode the email already looks native, so skip it.
+    const dark = effectiveTheme() === 'dark';
+    const style = dark
+      ? `html { background: #1a1a1a; }
+         body { margin: 0; padding: 16px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; word-wrap: break-word; background: #fff !important; filter: invert(0.9) hue-rotate(180deg) !important; }
+         img, svg, video, picture { filter: invert(0.9) hue-rotate(180deg) !important; }
+         img { max-width: 100%; }
+         a { color: #1a73e8; }`
+      : `html { background: #fff; }
+         body { margin: 0; padding: 16px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; word-wrap: break-word; }
+         img { max-width: 100%; }
+         a { color: #1a73e8; }`;
+
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank">
-      <style>
-        html { background: #1a1a1a; }
-        body { margin: 0; padding: 16px; font-family: -apple-system, "Segoe UI", Arial, sans-serif; word-wrap: break-word; background: #fff !important; filter: invert(0.9) hue-rotate(180deg) !important; }
-        img, svg, video, picture { filter: invert(0.9) hue-rotate(180deg) !important; }
-        img { max-width: 100%; }
-        a { color: #1a73e8; }
-      </style></head><body>${html}</body></html>`;
+      <style>${style}</style></head><body>${html}</body></html>`;
   }
 
   function renderHtmlBody(c) {
@@ -507,8 +742,18 @@
     if (!c) return '<div class="center-msg">(no message selected)</div>';
     const tags = userTagsFor(c.labelIds);
     const available = availableTagsFor(c.labelIds);
+    const restoreCtx = !state.isSearch && (state.activeFolderId === 'TRASH' || state.activeFolderId === ARCHIVE_FOLDER_ID);
+    const headerIcons = restoreCtx
+      ? `<div class="reader-header-actions">
+           <div class="reader-icon-btn" id="icon-restore" title="${state.activeFolderId === 'TRASH' ? 'Restore' : 'Move to Inbox'}">${ICON_RESTORE}</div>
+         </div>`
+      : `<div class="reader-header-actions">
+           <div class="reader-icon-btn" id="icon-archive" title="Archive">${ICON_ARCHIVE}</div>
+           <div class="reader-icon-btn" id="icon-trash" title="Delete">${ICON_TRASH}</div>
+         </div>`;
     return `
       <div class="reader-header">
+        ${headerIcons}
         <div class="reader-subject">${esc(c.subject)}</div>
         <div class="reader-meta">
           <div><span class="k">From:</span> ${esc(c.sender)} &lt;${esc(c.email)}&gt;</div>
@@ -544,7 +789,6 @@
             </div>`).join('')}
         </div>` : ''}
       ${(() => {
-        const restoreCtx = !state.isSearch && (state.activeFolderId === 'TRASH' || state.activeFolderId === ARCHIVE_FOLDER_ID);
         if (restoreCtx) {
           const label = state.activeFolderId === 'TRASH' ? '[u] Restore' : '[u] Move to Inbox';
           return `
@@ -586,7 +830,7 @@
           </div>` : ''}
       </div>
       <div class="reader-actions">
-        <div class="act-btn primary" id="btn-send" style="background:#ff5c5c;color:#000;">[Ctrl+S] Send</div>
+        <div class="act-btn primary" id="btn-send" style="background:var(--accent);color:var(--btn-fg-on-accent);">[Ctrl+S] Send</div>
         <div class="act-btn" id="btn-attach">[+] Attach</div>
         <div class="act-btn" id="btn-discard">[Esc] Discard</div>
       </div>`;
@@ -601,6 +845,12 @@
     if (archive) archive.addEventListener('click', doArchive);
     if (del) del.addEventListener('click', doDelete);
     if (restore) restore.addEventListener('click', doRestore);
+    const iconArchive = document.getElementById('icon-archive');
+    const iconTrash = document.getElementById('icon-trash');
+    const iconRestore = document.getElementById('icon-restore');
+    if (iconArchive) iconArchive.addEventListener('click', doArchive);
+    if (iconTrash) iconTrash.addEventListener('click', doDelete);
+    if (iconRestore) iconRestore.addEventListener('click', doRestore);
     root.querySelectorAll('.attachment-row').forEach((el) => {
       el.addEventListener('click', () => saveAttachment(Number(el.dataset.idx)));
     });
@@ -660,6 +910,7 @@
     const status = await window.api.authStatus();
     if (status.signedIn) {
       state.email = status.email;
+      state.provider = status.provider || 'google';
       state.screen = 'app';
       render();
       await loadFolders();
@@ -669,15 +920,18 @@
     }
   }
 
-  async function doLogin() {
+  async function doLogin(provider) {
     if (state.loginBusy) return;
     state.loginBusy = true;
+    state.loginProvider = provider;
     state.loginError = '';
     render();
-    const res = await window.api.login();
+    const res = await window.api.login(provider);
     state.loginBusy = false;
+    state.loginProvider = null;
     if (res.ok) {
       state.email = res.email;
+      state.provider = res.provider || provider;
       state.screen = 'app';
       render();
       await loadFolders();
@@ -691,6 +945,7 @@
     await window.api.logout().catch(() => {});
     state.screen = 'login';
     state.email = '';
+    state.provider = 'google';
     state.folders = [];
     state.allLabels = [];
     state.activeFolderId = null;
@@ -1049,6 +1304,12 @@
     if (!state.isSearch) state.selectionByFolder[state.activeFolderId] = id;
     else state.selectionByFolder['__search__'] = id;
     render();
+    // render() rebuilds the whole message list from scratch every time, which
+    // resets its scroll position — without this, the highlighted row moves
+    // conceptually but can end up scrolled out of view (the list itself
+    // never appears to follow the selection).
+    const activeRow = document.querySelector('#msg-list .msg-row.active');
+    if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
     loadCurrentDetail();
   }
 
@@ -1059,13 +1320,28 @@
     const inField = tag === 'INPUT' || tag === 'TEXTAREA';
 
     if (state.screen === 'login') {
-      if (e.key === 'Enter') doLogin();
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        state.loginSelected = Math.min(LOGIN_PROVIDERS.length - 1, state.loginSelected + 1);
+        render();
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        state.loginSelected = Math.max(0, state.loginSelected - 1);
+        render();
+      } else if (e.key === 'Enter') {
+        doLogin(LOGIN_PROVIDERS[state.loginSelected]);
+      }
       return;
     }
     if (state.screen !== 'app') return;
 
     if (state.confirmModal) {
       if (e.key === 'Escape') closeConfirm();
+      return;
+    }
+
+    if (state.settingsOpen) {
+      if (e.key === 'Escape') closeSettings();
       return;
     }
 
@@ -1103,6 +1379,7 @@
     else if (e.key === 'u') doRestore();
     else if (e.key === 't') toggleTagPicker();
     else if (e.key === 'w') markAllReadCurrentFolder();
+    else if (e.key === ',') openSettings();
     else if (e.key === 'q') window.api.close();
     else if (e.key === 'Escape' && state.tagPickerOpen) { state.tagPickerOpen = false; render(); }
     else if (e.key === 'Escape' && state.searchOpen) { state.searchOpen = false; render(); }
