@@ -92,9 +92,9 @@ time switch:
 - **Search, pagination, and bulk actions** (mark all read, empty trash)
 - **Restore** — undo an accidental archive or trash in one keypress
 - **AI draft assist** — bring your own OpenAI or Anthropic API key (Settings
-  → AI draft assist) and a &#10024; icon shows up next to Subject once you've
-  typed one; click it to draft a message from the subject, or a reply using
-  the original message as context
+  → AI draft assist) and a **[ AI ]** button shows up next to Subject once
+  you've typed one; click it to draft a message from the subject, or a
+  reply using the original message as context
 - Encrypted token storage via Electron's `safeStorage` — Windows DPAPI,
   macOS Keychain, or the Linux Secret Service (gnome-keyring/kwallet) if
   one's running; falls back to plain storage otherwise, same as any other
@@ -199,6 +199,42 @@ any other app.
 > packaging step needs briefly. Turn on **Developer Mode** (Settings →
 > Privacy & Security → For Developers) once, or run the command from an
 > elevated ("Run as administrator") terminal.
+
+### 5. AI draft assist setup (optional)
+
+This is a separate, paid, pay-per-use API — **not** the same thing as a
+ChatGPT Plus or Claude Pro subscription, and those subscriptions don't
+unlock it. You're billed by usage (typically fractions of a cent per
+email draft), so add a small amount of credit rather than a subscription.
+
+**OpenAI:**
+1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+   (sign in or create an account).
+2. Add billing: **Settings → Billing** → add a payment method and a small
+   amount of credit (a few dollars covers a very large number of drafts at
+   the model below).
+3. Back on the API keys page, **Create new secret key**, copy it — you
+   won't be able to see it again after this.
+
+**Anthropic (Claude):**
+1. Go to [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)
+   (sign in or create an account).
+2. Add billing: **Settings → Billing** → add a payment method and a small
+   amount of credit.
+3. **Create Key**, copy it.
+
+Paste whichever key into **Settings → AI draft assist** in the app.
+
+**Which model to pick** (for low cost + still-good results): leave the
+model field blank to use BeanyBox's built-in defaults — `gpt-4o-mini` for
+OpenAI, `claude-3-5-haiku-20241022` for Anthropic. Both are each
+provider's small/fast tier: a fraction of the cost of their flagship models
+(GPT-4o / Claude Opus) while still writing perfectly coherent, well-formed
+email drafts — overkill quality isn't really the point for a one-paragraph
+reply. Only override the model field if you specifically want to spend
+more for a smarter model, or a provider retires one of these two names —
+check the provider's own pricing page for their current cheapest small
+model if so, since exact model names and prices shift over time.
 
 ## Keyboard shortcuts
 

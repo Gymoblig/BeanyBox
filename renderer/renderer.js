@@ -880,7 +880,7 @@
         <div class="compose-field">
           <span class="flabel">Subject:</span>
           <input id="compose-subject" value="${esc(cm.subject)}">
-          ${cm.subject.trim() ? `<span class="ai-icon ${state.aiBusy ? 'busy' : ''}" id="ai-draft-btn" title="Draft with AI">${state.aiBusy ? '…' : '&#10024;'}</span>` : ''}
+          ${cm.subject.trim() ? `<span class="ai-icon ${state.aiBusy ? 'busy' : ''}" id="ai-draft-btn" title="Draft with AI">${state.aiBusy ? '[ ... ]' : '[ AI ]'}</span>` : ''}
         </div>
         <textarea id="compose-body" class="compose-body">${esc(cm.body)}</textarea>
         ${cm.attachments.length ? `
@@ -981,7 +981,7 @@
       icon.id = 'ai-draft-btn';
       icon.className = 'ai-icon';
       icon.title = 'Draft with AI';
-      icon.innerHTML = '&#10024;';
+      icon.textContent = '[ AI ]';
       icon.addEventListener('click', doAiDraft);
       field.insertAdjacentElement('afterend', icon);
     } else if (!shouldShow && icon) {
@@ -995,7 +995,7 @@
     if (!cm.subject.trim()) return;
     const st = await window.api.aiStatus();
     if (!st.configured) {
-      state.statusRight = 'no AI provider configured — add one in Settings (,)';
+      state.statusRight = 'No AI detected';
       render();
       return;
     }
