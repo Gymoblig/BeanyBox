@@ -5,6 +5,7 @@ const googleAuth = require('./google-auth');
 const microsoftAuth = require('./microsoft-auth');
 const { GmailClient } = require('./gmail');
 const { OutlookClient } = require('./outlook');
+const ai = require('./ai');
 
 const MIME_TYPES = {
   '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -211,4 +212,18 @@ ipcMain.handle('gmail:downloadAttachment', async (e, { messageId, attachmentId, 
   const buf = Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
   fs.writeFileSync(res.filePath, buf);
   return { ok: true, path: res.filePath };
+});
+
+// --- AI draft assist ---
+ipcMain.handle('ai:status', () => ai.status());
+ipcMain.handle('ai:getConfig', () => ai.publicConfig());
+ipcMain.handle('ai:saveConfig', (e, cfg) => { ai.saveConfig(cfg); return { ok: true }; });
+ipcMain.handle('ai:clearConfig', () => { ai.clearConfig(); return { ok: true }; });
+ipcMain.handle('ai:draft', async (e, { subject, context }) => {
+  try {
+    const text = await ai.draftFromSubject({ subject, context });
+    return { ok: true, text };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });

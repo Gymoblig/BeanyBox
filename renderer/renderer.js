@@ -215,7 +215,7 @@
   }
 
   function emptyCompose() {
-    return { to: '', subject: '', body: '', threadId: null, inReplyTo: null, references: null, attachments: [] };
+    return { to: '', subject: '', body: '', threadId: null, inReplyTo: null, references: null, attachments: [], replyContext: '' };
   }
 
   const state = {
@@ -254,6 +254,9 @@
       density: localStorage.getItem('beanybox_density') || 'comfortable', // comfortable | compact
       timeFormat: localStorage.getItem('beanybox_timeFormat') || '12h', // 12h | 24h
     },
+    ai: { provider: '', model: '', hasKey: false }, // mirrors main-process config; never holds the actual key
+    aiKeyInput: '',
+    aiBusy: false,
   };
 
   function effectiveTheme() {
@@ -318,13 +321,39 @@
     render();
   }
 
-  function openSettings() {
+  async function openSettings() {
     state.settingsOpen = true;
+    state.aiKeyInput = '';
+    render();
+    state.ai = await window.api.aiGetConfig();
     render();
   }
 
   function closeSettings() {
     state.settingsOpen = false;
+    render();
+  }
+
+  function setAiProvider(provider) {
+    state.ai.provider = provider;
+    render();
+  }
+
+  async function saveAiConfig() {
+    const payload = { provider: state.ai.provider, model: state.ai.model };
+    if (state.aiKeyInput.trim()) payload.apiKey = state.aiKeyInput.trim();
+    await window.api.aiSaveConfig(payload);
+    state.aiKeyInput = '';
+    state.ai = await window.api.aiGetConfig();
+    state.statusRight = 'AI settings saved';
+    render();
+  }
+
+  async function clearAiConfig() {
+    await window.api.aiClearConfig();
+    state.aiKeyInput = '';
+    state.ai = await window.api.aiGetConfig();
+    state.statusRight = 'AI settings cleared';
     render();
   }
 
@@ -464,6 +493,28 @@
           </div>
 
           <div class="settings-section">
+            <div class="settings-label">AI draft assist</div>
+            <div class="settings-hint">Add an API key to get a &#10024; icon next to Subject in
+              compose — click it to draft a message from the subject (or a reply, using the
+              original message as context). The key is stored encrypted and never leaves this
+              machine except to call the provider you pick below.</div>
+            <div class="option-row">
+              <div class="option-btn ${state.ai.provider === 'openai' ? 'active' : ''}" data-ai-provider="openai">OpenAI</div>
+              <div class="option-btn ${state.ai.provider === 'anthropic' ? 'active' : ''}" data-ai-provider="anthropic">Claude (Anthropic)</div>
+            </div>
+            <div class="ai-key-row">
+              <input type="password" id="ai-key-input" placeholder="${state.ai.hasKey ? 'saved — leave blank to keep it' : 'API key'}" value="${esc(state.aiKeyInput)}">
+            </div>
+            <div class="ai-key-row">
+              <input type="text" id="ai-model-input" placeholder="model (optional — e.g. gpt-4o-mini)" value="${esc(state.ai.model)}">
+            </div>
+            <div class="option-row" style="margin-top:8px;">
+              <div class="act-btn primary" id="ai-save-btn">Save</div>
+              ${state.ai.hasKey || state.ai.provider ? '<div class="act-btn" id="ai-clear-btn">Clear</div>' : ''}
+            </div>
+          </div>
+
+          <div class="settings-section">
             <div class="settings-label">Confirmations</div>
             <div class="settings-hint">Reset any "don't ask again" dialogs you've dismissed (e.g. Empty Trash).</div>
             <div class="act-btn" id="settings-reset-confirms">Reset confirmations</div>
@@ -497,6 +548,17 @@
     modalRootAll('[data-pagesize]').forEach((el) => {
       el.addEventListener('click', () => setPageSize(Number(el.dataset.pagesize)));
     });
+    modalRootAll('[data-ai-provider]').forEach((el) => {
+      el.addEventListener('click', () => setAiProvider(el.dataset.aiProvider));
+    });
+    const aiKeyInput = document.getElementById('ai-key-input');
+    if (aiKeyInput) aiKeyInput.addEventListener('input', () => { state.aiKeyInput = aiKeyInput.value; });
+    const aiModelInput = document.getElementById('ai-model-input');
+    if (aiModelInput) aiModelInput.addEventListener('input', () => { state.ai.model = aiModelInput.value; });
+    const aiSaveBtn = document.getElementById('ai-save-btn');
+    if (aiSaveBtn) aiSaveBtn.addEventListener('click', saveAiConfig);
+    const aiClearBtn = document.getElementById('ai-clear-btn');
+    if (aiClearBtn) aiClearBtn.addEventListener('click', clearAiConfig);
   }
 
   function modalRootAll(sel) {
@@ -818,6 +880,7 @@
         <div class="compose-field">
           <span class="flabel">Subject:</span>
           <input id="compose-subject" value="${esc(cm.subject)}">
+          ${cm.subject.trim() ? `<span class="ai-icon ${state.aiBusy ? 'busy' : ''}" id="ai-draft-btn" title="Draft with AI">${state.aiBusy ? '…' : '&#10024;'}</span>` : ''}
         </div>
         <textarea id="compose-body" class="compose-body">${esc(cm.body)}</textarea>
         ${cm.attachments.length ? `
@@ -882,11 +945,13 @@
     const subj = document.getElementById('compose-subject');
     const body = document.getElementById('compose-body');
     to.addEventListener('input', () => { state.compose.to = to.value; });
-    subj.addEventListener('input', () => { state.compose.subject = subj.value; });
+    subj.addEventListener('input', () => { state.compose.subject = subj.value; syncAiIcon(); });
     body.addEventListener('input', () => { state.compose.body = body.value; });
     document.getElementById('btn-send').addEventListener('click', doSend);
     document.getElementById('btn-discard').addEventListener('click', doDiscard);
     document.getElementById('btn-attach').addEventListener('click', pickAttachments);
+    const aiBtn = document.getElementById('ai-draft-btn');
+    if (aiBtn) aiBtn.addEventListener('click', doAiDraft);
     root.querySelectorAll('.attach-remove').forEach((el) => {
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -901,6 +966,55 @@
     if (!cm.to) return document.getElementById('compose-to');
     if (!cm.subject) return document.getElementById('compose-subject');
     return document.getElementById('compose-body');
+  }
+
+  // Adds/removes the AI icon next to Subject as it goes from empty to
+  // non-empty (and back), without a full re-render — a full render would
+  // rebuild the compose pane and steal focus out of the field being typed in.
+  function syncAiIcon() {
+    const field = document.getElementById('compose-subject');
+    if (!field) return;
+    const shouldShow = state.compose.subject.trim().length > 0 && !state.aiBusy;
+    let icon = document.getElementById('ai-draft-btn');
+    if (shouldShow && !icon) {
+      icon = document.createElement('span');
+      icon.id = 'ai-draft-btn';
+      icon.className = 'ai-icon';
+      icon.title = 'Draft with AI';
+      icon.innerHTML = '&#10024;';
+      icon.addEventListener('click', doAiDraft);
+      field.insertAdjacentElement('afterend', icon);
+    } else if (!shouldShow && icon) {
+      icon.remove();
+    }
+  }
+
+  async function doAiDraft() {
+    if (state.aiBusy) return;
+    const cm = state.compose;
+    if (!cm.subject.trim()) return;
+    const st = await window.api.aiStatus();
+    if (!st.configured) {
+      state.statusRight = 'no AI provider configured — add one in Settings (,)';
+      render();
+      return;
+    }
+    state.aiBusy = true;
+    state.statusRight = 'asking AI…';
+    render();
+    try {
+      const res = await window.api.aiDraft({ subject: cm.subject, context: cm.replyContext || '' });
+      if (res.ok) {
+        state.compose.body = res.text + (state.compose.body ? '\n\n' + state.compose.body : '');
+        state.statusRight = 'AI draft added';
+      } else {
+        state.statusRight = 'AI draft failed: ' + res.error;
+      }
+    } catch (e) {
+      state.statusRight = 'AI draft failed: ' + e.message;
+    }
+    state.aiBusy = false;
+    render();
   }
 
   // ---------- actions ----------
@@ -1094,6 +1208,7 @@
       threadId: c.threadId,
       inReplyTo: c.messageIdHeader,
       references: [c.references, c.messageIdHeader].filter(Boolean).join(' '),
+      replyContext: c.body || '',
     });
   }
 

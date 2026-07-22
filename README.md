@@ -91,6 +91,10 @@ time switch:
   native dialog
 - **Search, pagination, and bulk actions** (mark all read, empty trash)
 - **Restore** — undo an accidental archive or trash in one keypress
+- **AI draft assist** — bring your own OpenAI or Anthropic API key (Settings
+  → AI draft assist) and a &#10024; icon shows up next to Subject once you've
+  typed one; click it to draft a message from the subject, or a reply using
+  the original message as context
 - Encrypted token storage via Electron's `safeStorage` — Windows DPAPI,
   macOS Keychain, or the Linux Secret Service (gnome-keyring/kwallet) if
   one's running; falls back to plain storage otherwise, same as any other
@@ -241,6 +245,11 @@ any other app.
   delete the relevant token file and restart. It's `tokens.enc` for Google
   and `tokens-microsoft.enc` for Microsoft, under `%APPDATA%/BeanyBox/` on
   Windows or `~/.config/BeanyBox/` on Linux.
+- **AI draft assist**: the API key is stored encrypted the same way as your
+  mail tokens and lives only in the main process — the renderer never sees
+  it, only whether one's saved. It's sent to whichever provider (OpenAI or
+  Anthropic) you configure, and nowhere else. The subject line (plus the
+  original message's body, when replying) is sent as the prompt.
 - **Switching providers**: only one account is active at a time. Signing
   into the other provider doesn't clear the first one's stored session — you
   can switch back later without re-authenticating.

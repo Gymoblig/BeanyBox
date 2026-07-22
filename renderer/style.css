@@ -267,6 +267,20 @@ html, body {
   font-family: inherit; font-size: 13.5px; line-height: 1.8; resize: none; user-select: text;
 }
 
+.ai-icon {
+  flex-shrink: 0; cursor: pointer; font-size: 15px; color: var(--accent);
+  opacity: 0.85; user-select: none;
+}
+.ai-icon:hover { opacity: 1; }
+.ai-icon.busy { cursor: default; opacity: 0.5; font-size: 13px; }
+
+.ai-key-row { display: flex; margin-top: 8px; }
+.ai-key-row input {
+  flex: 1; background: transparent; border: 1px solid var(--border-soft); outline: none;
+  color: var(--text); font-family: inherit; font-size: 12.5px; padding: 6px 9px;
+}
+.ai-key-row input:focus { border-color: var(--accent); }
+
 .compose-attachments { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
 .attach-chip {
   display: flex; align-items: center; gap: 8px; border: 1px solid var(--border-soft); padding: 4px 8px;

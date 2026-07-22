@@ -31,4 +31,10 @@ contextBridge.exposeInMainWorld('api', {
   createLabel: (name) => ipcRenderer.invoke('gmail:createLabel', name),
   modifyLabels: (id, add, remove) => ipcRenderer.invoke('gmail:modifyLabels', { id, add, remove }),
   markAllRead: (labelId) => ipcRenderer.invoke('gmail:markAllRead', labelId),
+
+  aiStatus: () => ipcRenderer.invoke('ai:status'),
+  aiGetConfig: () => ipcRenderer.invoke('ai:getConfig'),
+  aiSaveConfig: (cfg) => ipcRenderer.invoke('ai:saveConfig', cfg),
+  aiClearConfig: () => ipcRenderer.invoke('ai:clearConfig'),
+  aiDraft: (payload) => ipcRenderer.invoke('ai:draft', payload),
 });
