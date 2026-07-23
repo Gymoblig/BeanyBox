@@ -2,11 +2,7 @@
   <img src="icon.png" width="140" alt="BeanyBox icon">
 </p>
 
-<p align="center">
-  <a href="https://github.com/greenythebeany/BeanyBox/releases">
-    <img src="download.png" alt="Download BeanyBox" height="160">
-  </a>
-</p>
+
 
 <h1 align="center">BeanyBox</h1>
 
@@ -22,6 +18,11 @@
   <a href="#notes">Notes</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/greenythebeany/BeanyBox/releases">
+    <img src="download_icon.png" alt="Download BeanyBox" height="160">
+  </a>
+</p>
 ---
 
 BeanyBox talks to your real Gmail account over OAuth — Google's own sign-in
