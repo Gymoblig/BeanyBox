@@ -1,6 +1,5 @@
 node_modules/
 dist/
-oauth-config.json
 *.enc
 .DS_Store
 npm-debug.log*

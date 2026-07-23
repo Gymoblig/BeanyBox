@@ -2,7 +2,7 @@
   "name": "beanybox",
   "productName": "BeanyBox",
   "version": "1.1.0",
-  "description": "GreenyBeany's terminal-styled desktop email client for Gmail and Outlook",
+  "description": "GreenyBeany's terminal-styled desktop email client for Gmail",
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -28,13 +28,10 @@
       "main.js",
       "preload.js",
       "google-auth.js",
-      "microsoft-auth.js",
       "gmail.js",
-      "outlook.js",
       "mail-html.js",
       "util.js",
       "icon.png",
-      "oauth-config.json",
       "renderer/**/*"
     ],
     "icon": "icon.png",

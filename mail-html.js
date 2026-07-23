@@ -1,7 +1,5 @@
-// Generic HTML-email string transforms, shared by every provider's mail
-// client (Gmail's API and Microsoft Graph both hand back raw HTML body
-// content that needs the same plain-text fallback / sanitizing / inline
-// image discovery regardless of where it came from).
+// Generic HTML-email string transforms for the raw HTML body content Gmail's
+// API hands back — plain-text fallback / sanitizing / inline image discovery.
 
 const NAMED_ENTITIES = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u0020',

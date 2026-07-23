@@ -1,4 +1,3 @@
-const fs = require('fs');
 const path = require('path');
 const { app, shell } = require('electron');
 const { OAuth2Client } = require('google-auth-library');
@@ -8,30 +7,52 @@ const { createTokenStore, createLoopbackAuthServer } = require('./util');
 // Delete Permanently in the Trash view needs the full scope instead.
 const SCOPES = ['https://mail.google.com/'];
 
-function configPath() {
-  return path.join(__dirname, 'oauth-config.json');
-}
-
 const tokenStore = createTokenStore(path.join(app.getPath('userData'), 'tokens.enc'));
 
-// The config used to be a flat { client_id, client_secret } object holding
-// only Google's credentials. It's now nested per-provider ({ google: {...},
-// microsoft: {...} }) so a second provider can live alongside it — the flat
-// shape is still accepted so existing users don't need to touch their file.
+// The OAuth client_id/client_secret used to ship in a bundled
+// oauth-config.json — fine for running from source, but it meant anyone's
+// built .exe carried the same (real) credentials. Each user now brings
+// their own, entered on the login screen or in Settings, encrypted at rest
+// the same way as the mail tokens and the AI API key.
+const configStore = createTokenStore(path.join(app.getPath('userData'), 'google-oauth-config.enc'));
+
+function getConfig() {
+  return configStore.read() || { client_id: '', client_secret: '' };
+}
+
+function hasConfig() {
+  const cfg = getConfig();
+  return !!(cfg.client_id && cfg.client_secret);
+}
+
+function saveConfig({ client_id, client_secret }) {
+  const current = getConfig();
+  configStore.save({
+    client_id: client_id !== undefined ? client_id.trim() : current.client_id,
+    client_secret: client_secret !== undefined && client_secret !== '' ? client_secret.trim() : current.client_secret,
+  });
+  client = null;
+}
+
+function clearConfig() {
+  configStore.clear();
+  client = null;
+}
+
+// { client_id, hasSecret } — the client_id isn't very sensitive (it's
+// visible in the browser's address bar during sign-in anyway) but the
+// secret never round-trips back to the renderer once saved.
+function publicConfig() {
+  const cfg = getConfig();
+  return { client_id: cfg.client_id || '', hasSecret: !!cfg.client_secret, hasConfig: hasConfig() };
+}
+
 function loadClientConfig() {
-  const p = configPath();
-  if (!fs.existsSync(p)) {
-    throw new Error(
-      'Missing oauth-config.json. Copy oauth-config.example.json to oauth-config.json and fill in ' +
-      'the client_id / client_secret from your Google Cloud OAuth "Desktop app" credentials.'
-    );
+  const cfg = getConfig();
+  if (!cfg.client_id || !cfg.client_secret) {
+    throw new Error('No Google OAuth client configured — add your Client ID and Client Secret first.');
   }
-  const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
-  const google = raw.google || raw;
-  if (!google.client_id || !google.client_secret) {
-    throw new Error('oauth-config.json is missing google.client_id or google.client_secret.');
-  }
-  return google;
+  return cfg;
 }
 
 let client = null;
@@ -92,4 +113,4 @@ function logout() {
   client = null;
 }
 
-module.exports = { login, logout, restoreSession, getClient };
+module.exports = { login, logout, restoreSession, getClient, hasConfig, publicConfig, saveConfig, clearConfig };

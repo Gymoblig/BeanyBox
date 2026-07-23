@@ -7,8 +7,12 @@ contextBridge.exposeInMainWorld('api', {
   onWindowState: (cb) => ipcRenderer.on('window:state', (e, state) => cb(state)),
 
   authStatus: () => ipcRenderer.invoke('auth:status'),
-  login: (provider) => ipcRenderer.invoke('auth:login', provider),
+  login: () => ipcRenderer.invoke('auth:login'),
   logout: () => ipcRenderer.invoke('auth:logout'),
+
+  googleGetConfig: () => ipcRenderer.invoke('google:getConfig'),
+  googleSaveConfig: (cfg) => ipcRenderer.invoke('google:saveConfig', cfg),
+  googleClearConfig: () => ipcRenderer.invoke('google:clearConfig'),
 
   listLabels: () => ipcRenderer.invoke('gmail:listLabels'),
   listMessages: (labelId, maxResults, pageToken) =>

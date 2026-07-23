@@ -2,9 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const googleAuth = require('./google-auth');
-const microsoftAuth = require('./microsoft-auth');
 const { GmailClient } = require('./gmail');
-const { OutlookClient } = require('./outlook');
 const ai = require('./ai');
 
 const MIME_TYPES = {
@@ -25,27 +23,6 @@ function guessMime(filename) {
 
 let mainWindow = null;
 let mailClient = null;
-let activeProvider = null; // 'google' | 'microsoft' | null
-
-function providerMarkerPath() {
-  return path.join(app.getPath('userData'), 'active-provider.json');
-}
-
-function readActiveProvider() {
-  try {
-    return JSON.parse(fs.readFileSync(providerMarkerPath(), 'utf8')).provider;
-  } catch (e) {
-    return null;
-  }
-}
-
-function writeActiveProvider(provider) {
-  fs.writeFileSync(providerMarkerPath(), JSON.stringify({ provider }));
-}
-
-function clearActiveProvider() {
-  try { fs.unlinkSync(providerMarkerPath()); } catch (e) { /* nothing to clear */ }
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -84,20 +61,8 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // Try whichever provider was last active first, then fall back to trying
-  // both — this keeps existing Gmail-only installs restoring with zero
-  // migration step even though there was no marker file before this.
-  const marker = readActiveProvider();
-  const order = marker === 'microsoft' ? ['microsoft', 'google'] : ['google', 'microsoft'];
-  for (const provider of order) {
-    if (provider === 'google') {
-      const restored = await googleAuth.restoreSession().catch(() => null);
-      if (restored) { mailClient = new GmailClient(restored); activeProvider = 'google'; break; }
-    } else {
-      const restored = await microsoftAuth.restoreSession().catch(() => null);
-      if (restored) { mailClient = new OutlookClient(restored); activeProvider = 'microsoft'; break; }
-    }
-  }
+  const restored = await googleAuth.restoreSession().catch(() => null);
+  if (restored) mailClient = new GmailClient(restored);
 
   createWindow();
 
@@ -124,41 +89,37 @@ ipcMain.handle('auth:status', async () => {
   if (mailClient) {
     try {
       const profile = await mailClient.getProfile();
-      return { signedIn: true, email: profile.emailAddress, provider: activeProvider };
+      return { signedIn: true, email: profile.emailAddress };
     } catch (e) {
       mailClient = null;
-      activeProvider = null;
     }
   }
   return { signedIn: false };
 });
 
-ipcMain.handle('auth:login', async (e, provider) => {
+ipcMain.handle('auth:login', async () => {
   try {
-    if (provider === 'microsoft') {
-      const client = await microsoftAuth.login();
-      mailClient = new OutlookClient(client);
-    } else {
-      const client = await googleAuth.login();
-      mailClient = new GmailClient(client);
-    }
+    const client = await googleAuth.login();
+    mailClient = new GmailClient(client);
     const profile = await mailClient.getProfile();
-    activeProvider = provider === 'microsoft' ? 'microsoft' : 'google';
-    writeActiveProvider(activeProvider);
-    return { ok: true, email: profile.emailAddress, provider: activeProvider };
+    return { ok: true, email: profile.emailAddress };
   } catch (e) {
     return { ok: false, error: e.message };
   }
 });
 
 ipcMain.handle('auth:logout', async () => {
-  if (activeProvider === 'microsoft') microsoftAuth.logout();
-  else googleAuth.logout();
+  googleAuth.logout();
   mailClient = null;
-  activeProvider = null;
-  clearActiveProvider();
   return { ok: true };
 });
+
+// --- Google OAuth client config (bring-your-own client_id/client_secret,
+// entered on the login screen or in Settings so the built app never bundles
+// real credentials) ---
+ipcMain.handle('google:getConfig', () => googleAuth.publicConfig());
+ipcMain.handle('google:saveConfig', (e, cfg) => { googleAuth.saveConfig(cfg); return { ok: true }; });
+ipcMain.handle('google:clearConfig', () => { googleAuth.clearConfig(); return { ok: true }; });
 
 // --- mail ---
 function requireClient() {

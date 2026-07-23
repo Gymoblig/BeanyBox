@@ -5,7 +5,7 @@
 <h1 align="center">BeanyBox</h1>
 
 <p align="center">
-  A terminal-styled desktop email client for Gmail and Outlook — keyboard-driven, themeable, built with Electron.
+  A terminal-styled desktop email client for Gmail — keyboard-driven, themeable, built with Electron.
 </p>
 
 <p align="center">
@@ -18,14 +18,10 @@
 
 ---
 
-BeanyBox talks to your real Gmail or Outlook/Microsoft 365 account over
-OAuth — Google's or Microsoft's own sign-in page handles your password,
-BeanyBox never sees it. Everything (read, send, reply, archive, trash, tag,
-search) runs against the live Gmail API or Microsoft Graph API, wrapped in a
-fast, keyboard-first TUI-inspired interface instead of a browser tab.
-
-Only one account is signed in at a time today (switching providers just
-means signing out and back in with the other).
+BeanyBox talks to your real Gmail account over OAuth — Google's own sign-in
+page handles your password, BeanyBox never sees it. Everything (read, send,
+reply, archive, trash, tag, search) runs against the live Gmail API, wrapped
+in a fast, keyboard-first TUI-inspired interface instead of a browser tab.
 
 ## Showcase
 
@@ -34,9 +30,8 @@ means signing out and back in with the other).
 </p>
 
 <p align="center"><i>
-  Gmail labels and Outlook categories both show up as the same colored tags,
-  HTML email renders for real, and archive/trash sit right on the message
-  header.
+  Gmail labels show up as colored tags, HTML email renders for real, and
+  archive/trash sit right on the message header.
 </i></p>
 
 ### Light & dark
@@ -74,9 +69,6 @@ time switch:
 
 ## Features
 
-- **Two providers, one interface** — sign in with Gmail or Outlook/Microsoft
-  365; Gmail labels and Outlook categories both show up as the same taggable
-  chips
 - **Keyboard-driven** — `j`/`k` to move, `c` compose, `r` reply, `a` archive,
   `d` delete, `t` tag, `w` mark all read, `Ctrl+Space` search, `,` settings,
   `q` quit
@@ -102,13 +94,11 @@ time switch:
 
 ## Getting started
 
-You only need to set up the provider(s) you actually plan to sign in with —
-skip either section below if you're not using that account type.
-
-### 1. Google Cloud setup (one-time, ~5 minutes)
+### Google Cloud setup (one-time, ~5 minutes)
 
 Google requires every app that talks to Gmail to have its own OAuth client.
-You create this yourself, in your own Google account.
+You create this yourself, in your own Google account — BeanyBox doesn't ship
+with one built in, so nobody's credentials are bundled in the app or this repo.
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com/) and
    create a new project (any name, e.g. `beanybox-mail`).
@@ -124,64 +114,25 @@ You create this yourself, in your own Google account.
 4. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
    - Application type: **Desktop app**
    - Copy the **Client ID** and **Client secret**
-5. In this repo, copy `oauth-config.example.json` → `oauth-config.json` and
-   fill in those two values under `google`:
+5. Paste those two values into BeanyBox: on first launch, the login screen
+   asks for them directly; later on you can change them any time in
+   **Settings → Google OAuth client**. They're stored encrypted on your
+   machine only (same mechanism as your mail tokens) — never in this repo,
+   never bundled into a built `.exe`/`.AppImage`.
 
-   ```json
-   {
-     "google": {
-       "client_id": "xxxxxxxx.apps.googleusercontent.com",
-       "client_secret": "xxxxxxxx"
-     }
-   }
-   ```
-
-   `oauth-config.json` is gitignored — it never leaves your machine, and only
-   identifies the app to Google, not you.
-
-### 2. Microsoft Azure setup (one-time, ~5 minutes) — for Outlook/Microsoft 365
-
-Same idea as Google's: Microsoft requires every app that talks to Graph to
-have its own registration, which you create yourself in your own Microsoft
-account (a free personal Microsoft account is enough — no Azure subscription
-or credit card needed for this).
-
-1. Go to [entra.microsoft.com](https://entra.microsoft.com/) → **Applications
-   → App registrations → New registration**.
-2. Name: `BeanyBox` (or anything).
-   Supported account types: **Accounts in any organizational directory and
-   personal Microsoft accounts**.
-3. **Authentication → Add a platform → Mobile and desktop applications** →
-   add the redirect URI `http://localhost` (BeanyBox actually redirects to a
-   dynamic `127.0.0.1` port at runtime — Microsoft's loopback exception for
-   this platform type allows that to match).
-4. **API permissions → Add a permission → Microsoft Graph → Delegated
-   permissions** → add `Mail.ReadWrite`, `Mail.Send`, `User.Read`,
-   `offline_access` (`User.Read` and `offline_access` are usually pre-added).
-5. Copy the **Application (client) ID** from the app's Overview page — no
-   client secret is needed (public client + PKCE).
-6. In `oauth-config.json`, fill in `microsoft.client_id`:
-
-   ```json
-   {
-     "microsoft": { "client_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" }
-   }
-   ```
-
-### 3. Install & run
+### Install & run
 
 ```sh
 npm install
 npm start
 ```
 
-Click **Sign in with Google** or **Sign in with Microsoft** on the login
-screen (`j`/`k` or arrow keys to choose, `Enter` to go) — your default
-browser opens that provider's real consent page. Approve it and you're in. A
-refresh token is stored encrypted in your user profile, so you won't need to
-sign in again.
+Paste your Client ID/Secret on the first-run screen, then click **Sign in
+with Google** (`Enter` to go) — your default browser opens Google's real
+consent page. Approve it and you're in. A refresh token is stored encrypted
+in your user profile, so you won't need to sign in again.
 
-### 4. Build a standalone app (optional)
+### Build a standalone app (optional)
 
 ```sh
 npm run dist
@@ -200,7 +151,7 @@ any other app.
 > Privacy & Security → For Developers) once, or run the command from an
 > elevated ("Run as administrator") terminal.
 
-### 5. AI draft assist setup (optional)
+### AI draft assist setup (optional)
 
 This is a separate, paid, pay-per-use API — **not** the same thing as a
 ChatGPT Plus or Claude Pro subscription, and those subscriptions don't
@@ -255,19 +206,15 @@ model if so, since exact model names and prices shift over time.
 
 ## Notes
 
-- **Scope**: for Gmail, uses the full `https://mail.google.com/` scope (read,
-  send, archive, trash, permanent delete) — Gmail requires this broadest
-  scope specifically for permanent delete. For Outlook, uses Microsoft
-  Graph's `Mail.ReadWrite`/`Mail.Send`. Either way, access is limited to mail
-  only, nothing else in your Google or Microsoft account.
+- **Scope**: uses the full `https://mail.google.com/` scope (read, send,
+  archive, trash, permanent delete) — Gmail requires this broadest scope
+  specifically for permanent delete. Access is limited to mail only, nothing
+  else in your Google account.
 - **Folders**: Inbox, your custom labels, Starred, Sent, Drafts, Trash, and
-  a synthetic **Archived** view for Gmail (Gmail has no real "archived"
-  label — archiving just removes Inbox, so this is a saved search under the
-  hood). Outlook has a real Archive folder, so its equivalent view is a
-  normal folder; only the 5 standard Outlook folders are shown, not custom
-  ones you may have created in Outlook itself.
-- **Tags**: Gmail labels and Outlook categories both show up as the same
-  colored chips — add, remove, or create them on the fly either way.
+  a synthetic **Archived** view (Gmail has no real "archived" label —
+  archiving just removes Inbox, so this is a saved search under the hood).
+- **Tags**: Gmail labels show up as colored chips — add, remove, or create
+  them on the fly.
 - **Trash**: the header button becomes **Empty Trash**, confirmed via an
   in-app dialog (with an optional "don't ask again"). Individual messages no
   longer have their own permanent-delete action — that's what Empty Trash
@@ -278,14 +225,14 @@ model if so, since exact model names and prices shift over time.
   their email.
 - **Sign out**: click **[sign out]** next to your email address (top bar).
   To force a fresh sign-in after a scope change, that alone isn't enough —
-  delete the relevant token file and restart. It's `tokens.enc` for Google
-  and `tokens-microsoft.enc` for Microsoft, under `%APPDATA%/BeanyBox/` on
+  delete the `tokens.enc` file and restart, under `%APPDATA%/BeanyBox/` on
   Windows or `~/.config/BeanyBox/` on Linux.
+- **Google OAuth client**: your Client ID/Secret are stored encrypted the
+  same way as your mail tokens, under `google-oauth-config.enc` in that same
+  folder. Changing them in Settings signs you out, since the stored session
+  belongs to whichever client it was issued to.
 - **AI draft assist**: the API key is stored encrypted the same way as your
   mail tokens and lives only in the main process — the renderer never sees
   it, only whether one's saved. It's sent to whichever provider (OpenAI or
   Anthropic) you configure, and nowhere else. The subject line (plus the
   original message's body, when replying) is sent as the prompt.
-- **Switching providers**: only one account is active at a time. Signing
-  into the other provider doesn't clear the first one's stored session — you
-  can switch back later without re-authenticating.

@@ -26,7 +26,6 @@
     { id: 'pink', name: 'Pink', value: '#ff8ac2' },
   ];
   const PAGE_SIZES = [10, 20, 30, 50, 100];
-  const LOGIN_PROVIDERS = ['google', 'microsoft'];
 
   const SVG_ICON_ATTRS = 'viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
   const ICON_ARCHIVE = `<svg ${SVG_ICON_ATTRS}><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>`;
@@ -221,11 +220,8 @@
   const state = {
     screen: 'loading', // loading | login | app
     loginBusy: false,
-    loginProvider: null, // 'google' | 'microsoft' — which one is mid-flight
-    loginSelected: 0, // index into LOGIN_PROVIDERS — which login button [j/k] is on
     loginError: '',
     email: '',
-    provider: 'google', // 'google' | 'microsoft' — which account is signed in
     folders: [],
     activeFolderId: null,
     activeFolderName: '',
@@ -257,6 +253,11 @@
     ai: { provider: '', model: '', hasKey: false }, // mirrors main-process config; never holds the actual key
     aiKeyInput: '',
     aiBusy: false,
+    // Google OAuth client (client_id/client_secret) — bring-your-own, entered
+    // on the login screen or in Settings. Mirrors main-process config; the
+    // secret never round-trips back once saved.
+    googleConfig: { client_id: '', hasSecret: false, hasConfig: false },
+    googleConfigInput: { clientId: '', clientSecret: '' },
   };
 
   function effectiveTheme() {
@@ -324,8 +325,10 @@
   async function openSettings() {
     state.settingsOpen = true;
     state.aiKeyInput = '';
+    state.googleConfigInput.clientSecret = '';
     render();
     state.ai = await window.api.aiGetConfig();
+    await loadGoogleConfig();
     render();
   }
 
@@ -354,6 +357,36 @@
     state.aiKeyInput = '';
     state.ai = await window.api.aiGetConfig();
     state.statusRight = 'AI settings cleared';
+    render();
+  }
+
+  async function loadGoogleConfig() {
+    state.googleConfig = await window.api.googleGetConfig();
+    state.googleConfigInput.clientId = state.googleConfig.client_id;
+  }
+
+  async function saveGoogleConfig() {
+    const payload = {};
+    if (state.googleConfigInput.clientId.trim()) payload.client_id = state.googleConfigInput.clientId.trim();
+    if (state.googleConfigInput.clientSecret.trim()) payload.client_secret = state.googleConfigInput.clientSecret.trim();
+    await window.api.googleSaveConfig(payload);
+    state.googleConfigInput.clientSecret = '';
+    await loadGoogleConfig();
+    if (state.screen === 'app') {
+      // The signed-in session belongs to whichever client it was issued to —
+      // switching clients mid-session would just fail on the next API call.
+      closeSettings();
+      await doLogout();
+    }
+    state.statusRight = 'Google OAuth client saved';
+    render();
+  }
+
+  async function clearGoogleConfig() {
+    await window.api.googleClearConfig();
+    state.googleConfigInput = { clientId: '', clientSecret: '' };
+    await loadGoogleConfig();
+    state.statusRight = 'Google OAuth client cleared';
     render();
   }
 
@@ -493,6 +526,24 @@
           </div>
 
           <div class="settings-section">
+            <div class="settings-label">Google OAuth client</div>
+            <div class="settings-hint">The Client ID and Secret that identify this app to Google when signing
+              in — from your own <a href="https://console.cloud.google.com/" target="_blank">Google Cloud</a>
+              OAuth "Desktop app" credentials, not a Google account password. Stored encrypted on this
+              machine only. Changing this signs you out.</div>
+            <div class="ai-key-row">
+              <input type="text" id="google-client-id-input" placeholder="Client ID (…apps.googleusercontent.com)" value="${esc(state.googleConfigInput.clientId)}">
+            </div>
+            <div class="ai-key-row">
+              <input type="password" id="google-client-secret-input" placeholder="${state.googleConfig.hasSecret ? 'Client Secret saved — leave blank to keep it' : 'Client Secret'}" value="${esc(state.googleConfigInput.clientSecret)}">
+            </div>
+            <div class="option-row" style="margin-top:8px;">
+              <div class="act-btn primary" id="google-config-save-btn">Save</div>
+              ${state.googleConfig.hasConfig ? '<div class="act-btn" id="google-config-clear-btn">Clear</div>' : ''}
+            </div>
+          </div>
+
+          <div class="settings-section">
             <div class="settings-label">AI draft assist</div>
             <div class="settings-hint">Add an API key to get a &#10024; icon next to Subject in
               compose — click it to draft a message from the subject (or a reply, using the
@@ -559,6 +610,15 @@
     if (aiSaveBtn) aiSaveBtn.addEventListener('click', saveAiConfig);
     const aiClearBtn = document.getElementById('ai-clear-btn');
     if (aiClearBtn) aiClearBtn.addEventListener('click', clearAiConfig);
+
+    const googleClientIdInput = document.getElementById('google-client-id-input');
+    if (googleClientIdInput) googleClientIdInput.addEventListener('input', () => { state.googleConfigInput.clientId = googleClientIdInput.value; });
+    const googleClientSecretInput = document.getElementById('google-client-secret-input');
+    if (googleClientSecretInput) googleClientSecretInput.addEventListener('input', () => { state.googleConfigInput.clientSecret = googleClientSecretInput.value; });
+    const googleConfigSaveBtn = document.getElementById('google-config-save-btn');
+    if (googleConfigSaveBtn) googleConfigSaveBtn.addEventListener('click', saveGoogleConfig);
+    const googleConfigClearBtn = document.getElementById('google-config-clear-btn');
+    if (googleConfigClearBtn) googleConfigClearBtn.addEventListener('click', clearGoogleConfig);
   }
 
   function modalRootAll(sel) {
@@ -566,23 +626,58 @@
   }
 
   function renderLogin() {
+    if (!state.googleConfig.hasConfig) {
+      root.innerHTML = `
+        <div class="login-wrap">
+          <div class="login-box">
+            <div class="login-title">&#10095; BeanyBox setup</div>
+            <div class="login-sub">Gmail &middot; GreenyBeany's TUI client v1.1.0</div>
+            <div class="login-desc">First time here: BeanyBox needs its own Google OAuth client so it can
+              ask Google for permission to read your mail — free, and takes about 5 minutes. Create one at
+              <a href="https://console.cloud.google.com/" target="_blank">console.cloud.google.com</a>
+              (OAuth consent screen + a "Desktop app" credential under APIs &amp; Services &rarr; Credentials),
+              then paste the Client ID and Client Secret below. See the
+              <a href="https://github.com/Gymoblig/BeanyBox#google-cloud-setup-one-time-5-minutes" target="_blank">README</a>
+              for the full walkthrough.</div>
+            <div class="ai-key-row">
+              <input type="text" id="login-google-client-id" placeholder="Client ID (…apps.googleusercontent.com)" value="${esc(state.googleConfigInput.clientId)}">
+            </div>
+            <div class="ai-key-row">
+              <input type="password" id="login-google-client-secret" placeholder="Client Secret" value="${esc(state.googleConfigInput.clientSecret)}">
+            </div>
+            <div class="login-btn" id="login-setup-save-btn" style="margin-top:14px;">Save &amp; continue</div>
+          </div>
+        </div>`;
+      const clientIdInput = document.getElementById('login-google-client-id');
+      clientIdInput.addEventListener('input', () => { state.googleConfigInput.clientId = clientIdInput.value; });
+      const clientSecretInput = document.getElementById('login-google-client-secret');
+      clientSecretInput.addEventListener('input', () => { state.googleConfigInput.clientSecret = clientSecretInput.value; });
+      document.getElementById('login-setup-save-btn').addEventListener('click', async () => {
+        await saveGoogleConfig();
+        render();
+      });
+      return;
+    }
+
     root.innerHTML = `
       <div class="login-wrap">
         <div class="login-box">
           <div class="login-title">&#10095; BeanyBox login</div>
-          <div class="login-sub">Gmail &middot; Outlook &middot; GreenyBeany's TUI client v1.1.0</div>
-          <div class="login-desc">Sign in with Google or Microsoft. A browser window opens for that provider's real sign-in and consent screen — BeanyBox never sees your password. [j/k] choose &middot; [Enter] sign in.</div>
+          <div class="login-sub">Gmail &middot; GreenyBeany's TUI client v1.1.0</div>
+          <div class="login-desc">A browser window opens for Google's real sign-in and consent screen —
+            BeanyBox never sees your password. [Enter] sign in.</div>
           ${state.loginError ? `<div class="login-error">! ${esc(state.loginError)}</div>` : ''}
-          <div class="login-btn ${state.loginBusy ? 'busy' : ''} ${state.loginSelected === 0 ? 'selected' : ''}" id="login-btn-google">
-            ${state.loginBusy && state.loginProvider === 'google' ? 'Waiting for browser…' : 'Sign in with Google'}
+          <div class="login-btn selected ${state.loginBusy ? 'busy' : ''}" id="login-btn-google">
+            ${state.loginBusy ? 'Waiting for browser…' : 'Sign in with Google'}
           </div>
-          <div class="login-btn ${state.loginBusy ? 'busy' : ''} ${state.loginSelected === 1 ? 'selected' : ''}" id="login-btn-microsoft" style="margin-top:10px;">
-            ${state.loginBusy && state.loginProvider === 'microsoft' ? 'Waiting for browser…' : 'Sign in with Microsoft'}
-          </div>
+          <div class="settings-hint" style="margin-top:14px;">Wrong OAuth client? <span class="signout-btn" id="login-change-client-btn">change it</span></div>
         </div>
       </div>`;
-    document.getElementById('login-btn-google').addEventListener('click', () => { state.loginSelected = 0; doLogin('google'); });
-    document.getElementById('login-btn-microsoft').addEventListener('click', () => { state.loginSelected = 1; doLogin('microsoft'); });
+    document.getElementById('login-btn-google').addEventListener('click', doLogin);
+    document.getElementById('login-change-client-btn').addEventListener('click', async () => {
+      await clearGoogleConfig();
+      render();
+    });
   }
 
   function renderApp() {
@@ -600,7 +695,7 @@
     root.innerHTML = `
       <div class="statusbar-top">
         <div class="left">
-          <span class="acct">&#9670; ${esc(state.email)}${state.provider === 'microsoft' ? ' (Outlook)' : ''}</span>
+          <span class="acct">&#9670; ${esc(state.email)}</span>
           <span class="signout-btn" id="signout-btn">[sign out]</span>
           <span class="settings-btn" id="settings-btn" title="Settings (,)">[settings]</span>
           <span>${esc(folderLabel)}</span>
@@ -1021,10 +1116,10 @@
 
   async function init() {
     render();
-    const status = await window.api.authStatus();
+    await loadGoogleConfig();
+    const status = state.googleConfig.hasConfig ? await window.api.authStatus() : { signedIn: false };
     if (status.signedIn) {
       state.email = status.email;
-      state.provider = status.provider || 'google';
       state.screen = 'app';
       render();
       await loadFolders();
@@ -1034,18 +1129,15 @@
     }
   }
 
-  async function doLogin(provider) {
+  async function doLogin() {
     if (state.loginBusy) return;
     state.loginBusy = true;
-    state.loginProvider = provider;
     state.loginError = '';
     render();
-    const res = await window.api.login(provider);
+    const res = await window.api.login();
     state.loginBusy = false;
-    state.loginProvider = null;
     if (res.ok) {
       state.email = res.email;
-      state.provider = res.provider || provider;
       state.screen = 'app';
       render();
       await loadFolders();
@@ -1059,7 +1151,6 @@
     await window.api.logout().catch(() => {});
     state.screen = 'login';
     state.email = '';
-    state.provider = 'google';
     state.folders = [];
     state.allLabels = [];
     state.activeFolderId = null;
@@ -1435,17 +1526,7 @@
     const inField = tag === 'INPUT' || tag === 'TEXTAREA';
 
     if (state.screen === 'login') {
-      if (e.key === 'j' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        state.loginSelected = Math.min(LOGIN_PROVIDERS.length - 1, state.loginSelected + 1);
-        render();
-      } else if (e.key === 'k' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        state.loginSelected = Math.max(0, state.loginSelected - 1);
-        render();
-      } else if (e.key === 'Enter') {
-        doLogin(LOGIN_PROVIDERS[state.loginSelected]);
-      }
+      if (e.key === 'Enter' && state.googleConfig.hasConfig && !inField) doLogin();
       return;
     }
     if (state.screen !== 'app') return;
