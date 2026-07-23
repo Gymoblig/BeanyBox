@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/greenythebeany/BeanyBox/releases">
-    <img src="download.png" alt="Download BeanyBox" height="40">
+    <img src="download.png" alt="Download BeanyBox" height="160">
   </a>
 </p>
 
