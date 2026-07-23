@@ -2,8 +2,6 @@
   <img src="icon.png" width="140" alt="BeanyBox icon">
 </p>
 
-
-
 <h1 align="center">BeanyBox</h1>
 
 <p align="center">
@@ -23,6 +21,7 @@
     <img src="download_icon.png" alt="Download BeanyBox" height="160">
   </a>
 </p>
+
 ---
 
 BeanyBox talks to your real Gmail account over OAuth — Google's own sign-in
