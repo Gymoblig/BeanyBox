@@ -545,7 +545,7 @@
 
           <div class="settings-section">
             <div class="settings-label">AI draft assist</div>
-            <div class="settings-hint">Add an API key to get a &#10024; icon next to Subject in
+            <div class="settings-hint">Add an API key to get a [ AI ] button next to Subject in
               compose — click it to draft a message from the subject (or a reply, using the
               original message as context). The key is stored encrypted and never leaves this
               machine except to call the provider you pick below.</div>
