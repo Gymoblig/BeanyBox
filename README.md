@@ -2,6 +2,12 @@
   <img src="icon.png" width="140" alt="BeanyBox icon">
 </p>
 
+<p align="center">
+  <a href="https://github.com/greenythebeany/BeanyBox/releases">
+    <img src="download.png" alt="Download BeanyBox" height="40">
+  </a>
+</p>
+
 <h1 align="center">BeanyBox</h1>
 
 <p align="center">
@@ -120,19 +126,31 @@ with one built in, so nobody's credentials are bundled in the app or this repo.
    machine only (same mechanism as your mail tokens) — never in this repo,
    never bundled into a built `.exe`/`.AppImage`.
 
-### Install & run
+### Install
+
+**Option A: Download (recommended)** — grab the latest portable `.exe` or
+NSIS installer (Windows) or `.AppImage` (Linux) from the
+[Releases page](https://github.com/greenythebeany/BeanyBox/releases). No
+Node/npm needed; nothing is bundled inside it except the app itself — you
+still bring your own Google OAuth client from the step above, entered on
+first launch.
+
+**Option B: Run from source**
 
 ```sh
 npm install
 npm start
 ```
 
-Paste your Client ID/Secret on the first-run screen, then click **Sign in
-with Google** (`Enter` to go) — your default browser opens Google's real
-consent page. Approve it and you're in. A refresh token is stored encrypted
-in your user profile, so you won't need to sign in again.
+Either way: paste your Client ID/Secret on the first-run screen, then click
+**Sign in with Google** (`Enter` to go) — your default browser opens
+Google's real consent page. Approve it and you're in. A refresh token is
+stored encrypted in your user profile, so you won't need to sign in again.
 
-### Build a standalone app (optional)
+### Build a standalone app yourself (optional)
+
+Only needed if you want to build your own `.exe`/`.AppImage` instead of
+using the one from Releases:
 
 ```sh
 npm run dist
