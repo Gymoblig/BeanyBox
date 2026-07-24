@@ -4,6 +4,7 @@ const fs = require('fs');
 const googleAuth = require('./google-auth');
 const { GmailClient } = require('./gmail');
 const ai = require('./ai');
+const { checkForUpdates } = require('./update-checker');
 
 const MIME_TYPES = {
   '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -69,10 +70,34 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+
+  // Silent background check — only speaks up if something's actually newer.
+  setTimeout(() => {
+    checkForUpdates()
+      .then((result) => {
+        if (result.status === 'available' && mainWindow) {
+          mainWindow.webContents.send('update:available', result);
+        }
+      })
+      .catch(() => {});
+  }, 4000);
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+// --- updates ---
+ipcMain.handle('app:getVersion', () => app.getVersion());
+ipcMain.handle('update:check', async () => {
+  try {
+    return await checkForUpdates();
+  } catch (e) {
+    return { status: 'error', error: e.message };
+  }
+});
+ipcMain.on('shell:openExternal', (e, url) => {
+  if (/^https?:\/\//i.test(url)) shell.openExternal(url);
 });
 
 // --- window controls ---

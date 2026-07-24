@@ -244,6 +244,7 @@
     loadingMore: false,
     confirmModal: null, // { title, message, confirmLabel, dontAskKey, dontAskChecked, onConfirm }
     settingsOpen: false,
+    appVersion: '',
     settings: {
       theme: localStorage.getItem('beanybox_theme') || 'system', // dark | light | system
       accent: localStorage.getItem('beanybox_accent') || 'red',
@@ -444,6 +445,30 @@
     m.onConfirm();
   }
 
+  function promptUpdateAvailable(info) {
+    showConfirm({
+      title: 'Update available',
+      message: `BeanyBox v${info.version} is available. Download it now?`,
+      confirmLabel: 'Download',
+      onConfirm: () => window.api.openExternal(info.url),
+    });
+  }
+
+  async function manualCheckForUpdates() {
+    const btn = document.getElementById('update-check-btn');
+    const status = document.getElementById('update-check-status');
+    if (status) status.textContent = 'Checking…';
+    const result = await window.api.checkForUpdates();
+    if (result.status === 'available') {
+      if (status) status.textContent = '';
+      promptUpdateAvailable(result);
+    } else if (result.status === 'error') {
+      if (status) status.textContent = 'Could not check for updates.';
+    } else {
+      if (status) status.textContent = "You're up to date.";
+    }
+  }
+
   function renderModals() {
     const m = state.confirmModal;
     const confirmHtml = !m ? '' : `
@@ -451,10 +476,11 @@
         <div class="modal-box">
           <div class="modal-title">&#10095; ${esc(m.title)}</div>
           <div class="modal-message">${esc(m.message)}</div>
+          ${m.dontAskKey ? `
           <label class="modal-checkbox">
             <input type="checkbox" id="modal-dontask">
             <span>Don't ask again</span>
-          </label>
+          </label>` : ''}
           <div class="modal-actions">
             <div class="act-btn" id="modal-cancel">[Esc] Cancel</div>
             <div class="act-btn primary" id="modal-confirm">${esc(m.confirmLabel)}</div>
@@ -470,7 +496,8 @@
       });
       document.getElementById('modal-cancel').addEventListener('click', closeConfirm);
       document.getElementById('modal-confirm').addEventListener('click', confirmModalAccept);
-      document.getElementById('modal-dontask').addEventListener('change', (e) => {
+      const dontAskEl = document.getElementById('modal-dontask');
+      if (dontAskEl) dontAskEl.addEventListener('change', (e) => {
         state.confirmModal.dontAskChecked = e.target.checked;
       });
     }
@@ -571,6 +598,15 @@
             <div class="act-btn" id="settings-reset-confirms">Reset confirmations</div>
           </div>
 
+          <div class="settings-section">
+            <div class="settings-label">Updates</div>
+            <div class="settings-hint">Version ${esc(state.appVersion || '')}</div>
+            <div class="option-row" style="align-items:center;">
+              <div class="act-btn" id="update-check-btn">Check for updates</div>
+              <div class="settings-hint" id="update-check-status" style="margin:0;"></div>
+            </div>
+          </div>
+
           <div class="modal-actions">
             <div class="act-btn primary" id="settings-close">[Esc] Close</div>
           </div>
@@ -584,6 +620,7 @@
     });
     document.getElementById('settings-close').addEventListener('click', closeSettings);
     document.getElementById('settings-reset-confirms').addEventListener('click', resetConfirmations);
+    document.getElementById('update-check-btn').addEventListener('click', manualCheckForUpdates);
     modalRootAll('[data-theme-opt]').forEach((el) => {
       el.addEventListener('click', () => setTheme(el.dataset.themeOpt));
     });
@@ -1116,6 +1153,7 @@
 
   async function init() {
     render();
+    window.api.getAppVersion().then((v) => { state.appVersion = v; if (state.settingsOpen) render(); });
     await loadGoogleConfig();
     const status = state.googleConfig.hasConfig ? await window.api.authStatus() : { signedIn: false };
     if (status.signedIn) {
@@ -1582,6 +1620,8 @@
   });
 
   setInterval(() => { if (state.screen === 'app' && state.mode !== 'compose') render(); }, 30000);
+
+  window.api.onUpdateAvailable(promptUpdateAvailable);
 
   init();
 })();
